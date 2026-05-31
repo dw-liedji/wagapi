@@ -54,6 +54,6 @@ RUN chmod +x /app/entrypoint.sh
 
 # USER app
 
-EXPOSE 8000
+EXPOSE 8001
 
 CMD ["/app/entrypoint.sh"]
