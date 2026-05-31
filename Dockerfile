@@ -42,10 +42,10 @@ RUN mkdir -p /data \
     && chown -R app:app /data
 
 # ---------------------------------------------------------
-# Copy virtualenv & source code
+# Copy source code & virtualenv (venv last so it always wins)
 # ---------------------------------------------------------
-COPY --from=builder /app/.venv /app/.venv
 COPY --chown=app:app . /app
+COPY --from=builder /app/.venv /app/.venv
 
 # ---------------------------------------------------------
 # Setup entrypoint
