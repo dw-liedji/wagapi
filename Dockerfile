@@ -54,6 +54,6 @@ RUN chmod +x /app/entrypoint.sh
 
 # USER app
 
-EXPOSE 8000
+EXPOSE ${PORT:-8000}
 
 CMD ["/app/entrypoint.sh"]
