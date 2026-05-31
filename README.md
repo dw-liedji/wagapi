@@ -39,8 +39,8 @@ Reserved: interface name `wg0` and port `51820` (static infra).
 
 ## Try from browser
 
-- Swagger UI: `http://localhost:8000/docs`
-- ReDoc: `http://localhost:8000/redoc`
+- Swagger UI: `http://localhost:8001/docs`
+- ReDoc: `http://localhost:8001/redoc`
 
 ### curl examples
 
@@ -50,7 +50,7 @@ All endpoints require the `X-API-KEY` header. Replace `/1` with actual IDs.
 
 ```sh
 # ── LIST ────────────────────────────────────────────────────
-curl -s http://localhost:8000/interfaces \
+curl -s http://localhost:8001/interfaces \
   -H "X-API-KEY: ProductionSecretDynamicTunnelAPIKeyCredentialToken" | jq
 
 # Response (200):
@@ -59,7 +59,7 @@ curl -s http://localhost:8000/interfaces \
 # ]
 
 # ── CREATE ──────────────────────────────────────────────────
-curl -s -X POST http://localhost:8000/interfaces \
+curl -s -X POST http://localhost:8001/interfaces \
   -H "Content-Type: application/json" \
   -H "X-API-KEY: ProductionSecretDynamicTunnelAPIKeyCredentialToken" \
   -d '{"name":"wg1","listen_port":51821,"endpoint":"vpn.example.com:51821"}' | jq
@@ -73,13 +73,13 @@ curl -s -X POST http://localhost:8000/interfaces \
 # }
 
 # ── GET ─────────────────────────────────────────────────────
-curl -s http://localhost:8000/interfaces/1 \
+curl -s http://localhost:8001/interfaces/1 \
   -H "X-API-KEY: ProductionSecretDynamicTunnelAPIKeyCredentialToken" | jq
 
 # Response (200): single interface object (same shape as CREATE response)
 
 # ── UPDATE ──────────────────────────────────────────────────
-curl -s -X PUT http://localhost:8000/interfaces/1 \
+curl -s -X PUT http://localhost:8001/interfaces/1 \
   -H "Content-Type: application/json" \
   -H "X-API-KEY: ProductionSecretDynamicTunnelAPIKeyCredentialToken" \
   -d '{"endpoint":"new.example.com:51821","dns":"8.8.8.8"}' | jq
@@ -87,7 +87,7 @@ curl -s -X PUT http://localhost:8000/interfaces/1 \
 # Response (200): updated interface object
 
 # ── DELETE ──────────────────────────────────────────────────
-curl -s -X DELETE http://localhost:8000/interfaces/1 \
+curl -s -X DELETE http://localhost:8001/interfaces/1 \
   -H "X-API-KEY: ProductionSecretDynamicTunnelAPIKeyCredentialToken" -w "\n%{http_code}\n"
 
 # Response: 204 No Content
@@ -97,7 +97,7 @@ curl -s -X DELETE http://localhost:8000/interfaces/1 \
 
 ```sh
 # ── LIST ────────────────────────────────────────────────────
-curl -s http://localhost:8000/interfaces/1/peers \
+curl -s http://localhost:8001/interfaces/1/peers \
   -H "X-API-KEY: ProductionSecretDynamicTunnelAPIKeyCredentialToken" | jq
 
 # Response (200):
@@ -106,7 +106,7 @@ curl -s http://localhost:8000/interfaces/1/peers \
 # ]
 
 # ── CREATE (auto key) ───────────────────────────────────────
-curl -s -X POST http://localhost:8000/interfaces/1/peers \
+curl -s -X POST http://localhost:8001/interfaces/1/peers \
   -H "Content-Type: application/json" \
   -H "X-API-KEY: ProductionSecretDynamicTunnelAPIKeyCredentialToken" \
   -d '{"device_name":"Developer-Laptop"}' | jq
@@ -120,7 +120,7 @@ curl -s -X POST http://localhost:8000/interfaces/1/peers \
 # }
 
 # ── CREATE (explicit key) ───────────────────────────────────
-curl -s -X POST http://localhost:8000/interfaces/1/peers \
+curl -s -X POST http://localhost:8001/interfaces/1/peers \
   -H "Content-Type: application/json" \
   -H "X-API-KEY: ProductionSecretDynamicTunnelAPIKeyCredentialToken" \
   -d '{"public_key":"xTIBdExlFbFKB5NUhVq3PPcEb4P+Jw4O6itFnH+Dhjc="}' | jq
@@ -128,13 +128,13 @@ curl -s -X POST http://localhost:8000/interfaces/1/peers \
 # Response (201): same shape, but private_key is null
 
 # ── GET ─────────────────────────────────────────────────────
-curl -s http://localhost:8000/interfaces/1/peers/1 \
+curl -s http://localhost:8001/interfaces/1/peers/1 \
   -H "X-API-KEY: ProductionSecretDynamicTunnelAPIKeyCredentialToken" | jq
 
 # Response (200): single peer object with config_file
 
 # ── UPDATE ──────────────────────────────────────────────────
-curl -s -X PUT http://localhost:8000/interfaces/1/peers/1 \
+curl -s -X PUT http://localhost:8001/interfaces/1/peers/1 \
   -H "Content-Type: application/json" \
   -H "X-API-KEY: ProductionSecretDynamicTunnelAPIKeyCredentialToken" \
   -d '{"device_name":"New-Device","allowed_ips":"10.9.0.10/32"}' | jq
@@ -142,7 +142,7 @@ curl -s -X PUT http://localhost:8000/interfaces/1/peers/1 \
 # Response (200): updated peer object
 
 # ── DELETE ──────────────────────────────────────────────────
-curl -s -X DELETE http://localhost:8000/interfaces/1/peers/1 \
+curl -s -X DELETE http://localhost:8001/interfaces/1/peers/1 \
   -H "X-API-KEY: ProductionSecretDynamicTunnelAPIKeyCredentialToken" -w "\n%{http_code}\n"
 
 # Response: 204 No Content
@@ -168,11 +168,11 @@ Requires `NET_ADMIN`, `SYS_MODULE` capabilities and `/dev/net/tun` device access
 |---|---|---|
 | `WAGAPI_API_KEY` | `ProductionSecretDynamicTunnelAPIKeyCredentialToken` | API auth key (`X-API-KEY` header) |
 | `WAGAPI_DATA_DIR` | `data` | Directory for SQLite database |
-| `PORT` | `8000` | Uvicorn listen port |
+| `PORT` | `8001` | Uvicorn listen port |
 
 ### Dokploy deployment
 
-1. Set the container **Port** to `8000` (or match `PORT` env).
+1. Set the container **Port** to `8001` (or match `PORT` env).
 2. Add **NET_ADMIN** + **SYS_MODULE** capabilities.
 3. Add `/dev/net/tun` device if WireGuard kernel ops are needed.
 4. Mount a persistent volume at the path set in `WAGAPI_DATA_DIR`.

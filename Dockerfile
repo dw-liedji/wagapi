@@ -52,7 +52,7 @@ COPY --chown=app:app . /app
 # ---------------------------------------------------------
 RUN chmod +x /app/entrypoint.sh
 
-USER app
+# USER app
 
 EXPOSE 8000
 
