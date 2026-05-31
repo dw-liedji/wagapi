@@ -27,6 +27,9 @@ def bypass_kernel_netlink(monkeypatch):
     monkeypatch.setattr(
         WireGuardEngine, "drop_peer_from_kernel", lambda *args, **kwargs: None
     )
+    monkeypatch.setattr(
+        WireGuardEngine, "get_wg0_public_key", lambda: "test_wg0_public_key"
+    )
 
 
 @pytest.fixture(scope="function")

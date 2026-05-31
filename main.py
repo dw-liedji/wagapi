@@ -15,7 +15,6 @@ API_SECRET_KEY = os.environ.get(
 )
 api_key_header = APIKeyHeader(name="X-API-KEY", auto_error=False)
 
-WG0_PUBLIC_KEY = os.environ.get("WG0_PUBLIC_KEY", "wg0_public_key_placeholder")
 WG0_ENDPOINT = os.environ.get("WG0_ENDPOINT", "vpn.example.com:51820")
 WG0_DNS = os.environ.get("WG0_DNS", "1.1.1.1")
 SUBNET_POOL = os.environ.get("SUBNET_POOL", "10.9.0.0/16")
@@ -112,7 +111,7 @@ def _build_peer_config(peer: models.Peer) -> str:
     return (
         f"[Interface]\nPrivateKey = {private_key}\nAddress = {peer.allowed_ips}\n"
         f"DNS = {WG0_DNS}\n\n"
-        f"[Peer]\nPublicKey = {WG0_PUBLIC_KEY}\n"
+        f"[Peer]\nPublicKey = {WireGuardEngine.get_wg0_public_key()}\n"
         f"Endpoint = {WG0_ENDPOINT}\nAllowedIPs = {SUBNET_POOL}\n"
     )
 

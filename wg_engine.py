@@ -1,4 +1,5 @@
 import base64
+import os
 from pyroute2 import WireGuard
 from cryptography.hazmat.primitives.asymmetric import x25519
 
@@ -12,6 +13,19 @@ class WireGuardEngine:
             base64.b64encode(priv_key.private_bytes_raw()).decode("utf-8"),
             base64.b64encode(pub_key.public_bytes_raw()).decode("utf-8"),
         )
+
+    @staticmethod
+    def get_wg0_public_key() -> str:
+        try:
+            with WireGuard() as wg:
+                info = wg.info("wg0")
+                if info:
+                    for name, value in info[0].get("attrs", []):
+                        if name == "WGDEVICE_A_PUBLIC_KEY":
+                            return base64.b64encode(value).decode()
+        except Exception:
+            pass
+        return os.environ.get("WG0_PUBLIC_KEY", "wg0_public_key_placeholder")
 
     @staticmethod
     def sync_peer_to_kernel(interface_name: str, public_key: str, allowed_ips: str) -> None:

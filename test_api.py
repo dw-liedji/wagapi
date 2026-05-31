@@ -32,6 +32,9 @@ def bypass_kernel_io(monkeypatch):
     monkeypatch.setattr(
         WireGuardEngine, "drop_peer_from_kernel", lambda *a, **k: None
     )
+    monkeypatch.setattr(
+        WireGuardEngine, "get_wg0_public_key", lambda: "test_wg0_public_key"
+    )
 
 
 class TestAddPeer:
