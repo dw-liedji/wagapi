@@ -1,5 +1,4 @@
 import ipaddress
-import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, status, Depends, Security
 from fastapi.security.api_key import APIKeyHeader
@@ -8,27 +7,21 @@ from sqlalchemy.orm import Session
 import models
 import schemas
 from database import engine, SessionLocal, get_db
+from settings import settings
 from wg_engine import WireGuardEngine
 
-API_SECRET_KEY = os.environ.get(
-    "WAGAPI_API_KEY", "ProductionSecretDynamicTunnelAPIKeyCredentialToken"
-)
 api_key_header = APIKeyHeader(name="X-API-KEY", auto_error=False)
-
-WG0_ENDPOINT = os.environ.get("WG0_ENDPOINT", "vpn.example.com:51820")
-WG0_DNS = os.environ.get("WG0_DNS", "1.1.1.1")
-SUBNET_POOL = os.environ.get("SUBNET_POOL", "10.9.0.0/16")
 
 
 def require_api_key(api_key: str = Security(api_key_header)):
-    if api_key != API_SECRET_KEY:
+    if api_key != settings.wagapi_api_key:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Invalid API Key."
         )
 
 
 def allocate_next_ip(db: Session) -> str:
-    network = ipaddress.ip_network(SUBNET_POOL)
+    network = ipaddress.ip_network(settings.subnet_pool)
     used_ips = {p.allowed_ips.split("/")[0] for p in db.query(models.Peer).all()}
 
     for ip in network.hosts():
@@ -43,6 +36,13 @@ def allocate_next_ip(db: Session) -> str:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     models.Base.metadata.create_all(bind=engine)
+    WireGuardEngine.ensure_wg0_interface()
+    db = SessionLocal()
+    try:
+        peers = [(p.public_key, p.allowed_ips) for p in db.query(models.Peer).all()]
+        WireGuardEngine.sync_all_peers_to_kernel("wg0", peers)
+    finally:
+        db.close()
     yield
 
 
@@ -111,9 +111,9 @@ def _build_peer_config(peer: models.Peer) -> str:
     wg0_pubkey = WireGuardEngine.get_wg0_public_key().rstrip("=")
     return (
         f"[Interface]\nPrivateKey = {private_key}\nAddress = {peer.allowed_ips}\n"
-        f"DNS = {WG0_DNS}\n\n"
+        f"DNS = {settings.wg0_dns}\n\n"
         f"[Peer]\nPublicKey = {wg0_pubkey}\n"
-        f"Endpoint = {WG0_ENDPOINT}\nAllowedIPs = {SUBNET_POOL}\n"
+        f"Endpoint = {settings.wg0_endpoint}\nAllowedIPs = {settings.subnet_pool}\n"
     )
 
 

@@ -3,7 +3,9 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.orm import sessionmaker
 
-DATA_DIR = os.path.abspath(os.environ.get("WAGAPI_DATA_DIR", "data"))
+from settings import settings
+
+DATA_DIR = os.path.abspath(settings.wagapi_data_dir)
 os.makedirs(DATA_DIR, exist_ok=True)
 SQLALCHEMY_DATABASE_URL = f"sqlite:///{os.path.join(DATA_DIR, 'wireguard_dynamic.db')}"
 

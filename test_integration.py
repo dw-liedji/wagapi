@@ -9,7 +9,8 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from database import Base, get_db
-from main import app, API_SECRET_KEY
+from main import app
+from settings import settings
 from wg_engine import WireGuardEngine
 
 SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"
@@ -29,6 +30,12 @@ def bypass_kernel_netlink(monkeypatch):
     )
     monkeypatch.setattr(
         WireGuardEngine, "get_wg0_public_key", lambda: "test_wg0_public_key"
+    )
+    monkeypatch.setattr(
+        WireGuardEngine, "ensure_wg0_interface", lambda: None
+    )
+    monkeypatch.setattr(
+        WireGuardEngine, "sync_all_peers_to_kernel", lambda *args, **kwargs: None
     )
 
 
@@ -54,7 +61,7 @@ def client():
 
 class TestPeerCreate:
     def test_happy_path(self, client):
-        headers = {"X-API-KEY": API_SECRET_KEY}
+        headers = {"X-API-KEY": settings.wagapi_api_key}
         res = client.post("/peers", json={}, headers=headers)
         assert res.status_code == 201, res.text
         data = res.json()
@@ -63,7 +70,7 @@ class TestPeerCreate:
         assert data["allowed_ips"].endswith("/32")
 
     def test_add_explicit_key(self, client):
-        headers = {"X-API-KEY": API_SECRET_KEY}
+        headers = {"X-API-KEY": settings.wagapi_api_key}
         pub, _ = WireGuardEngine.generate_keypair()
         res = client.post(
             "/peers",
@@ -75,7 +82,7 @@ class TestPeerCreate:
         assert res.json()["private_key"] is None
 
     def test_with_device_name(self, client):
-        headers = {"X-API-KEY": API_SECRET_KEY}
+        headers = {"X-API-KEY": settings.wagapi_api_key}
         res = client.post(
             "/peers",
             json={"device_name": "Test-Device"},
@@ -85,7 +92,7 @@ class TestPeerCreate:
         assert res.json()["device_name"] == "Test-Device"
 
     def test_duplicate_public_key_rejected(self, client):
-        headers = {"X-API-KEY": API_SECRET_KEY}
+        headers = {"X-API-KEY": settings.wagapi_api_key}
         pub, _ = WireGuardEngine.generate_keypair()
         client.post("/peers", json={"public_key": pub}, headers=headers)
         res = client.post("/peers", json={"public_key": pub}, headers=headers)
@@ -93,14 +100,14 @@ class TestPeerCreate:
         assert "collision" in res.json()["detail"]
 
     def test_consecutive_ip_allocation(self, client):
-        headers = {"X-API-KEY": API_SECRET_KEY}
+        headers = {"X-API-KEY": settings.wagapi_api_key}
         p1 = client.post("/peers", json={}, headers=headers).json()
         p2 = client.post("/peers", json={}, headers=headers).json()
         assert p1["allowed_ips"] == "10.9.0.2/32"
         assert p2["allowed_ips"] == "10.9.0.3/32"
 
     def test_config_file_is_well_formed(self, client):
-        headers = {"X-API-KEY": API_SECRET_KEY}
+        headers = {"X-API-KEY": settings.wagapi_api_key}
         data = client.post("/peers", json={}, headers=headers).json()
         cfg = data["config_file"]
         assert "[Interface]" in cfg
@@ -114,7 +121,7 @@ class TestPeerCreate:
 
 class TestApiResponseShape:
     def test_peer_response_shape(self, client):
-        headers = {"X-API-KEY": API_SECRET_KEY}
+        headers = {"X-API-KEY": settings.wagapi_api_key}
         data = client.post("/peers", json={}, headers=headers).json()
         assert set(data.keys()) == {
             "id",
@@ -129,7 +136,7 @@ class TestApiResponseShape:
         assert data["allowed_ips"].endswith("/32")
 
     def test_list_response_shape(self, client):
-        headers = {"X-API-KEY": API_SECRET_KEY}
+        headers = {"X-API-KEY": settings.wagapi_api_key}
         client.post("/peers", json={}, headers=headers)
         res = client.get("/peers", headers=headers)
         assert res.status_code == 200
@@ -170,13 +177,13 @@ class TestAuth:
 
 class TestListPeers:
     def test_list_empty(self, client):
-        headers = {"X-API-KEY": API_SECRET_KEY}
+        headers = {"X-API-KEY": settings.wagapi_api_key}
         res = client.get("/peers", headers=headers)
         assert res.status_code == 200
         assert res.json() == []
 
     def test_list_with_items(self, client):
-        headers = {"X-API-KEY": API_SECRET_KEY}
+        headers = {"X-API-KEY": settings.wagapi_api_key}
         client.post("/peers", json={}, headers=headers)
         client.post("/peers", json={}, headers=headers)
         res = client.get("/peers", headers=headers)
@@ -190,7 +197,7 @@ class TestListPeers:
 
 class TestGetPeer:
     def test_get_existing(self, client):
-        headers = {"X-API-KEY": API_SECRET_KEY}
+        headers = {"X-API-KEY": settings.wagapi_api_key}
         peer = client.post("/peers", json={}, headers=headers).json()
         res = client.get(f"/peers/{peer['id']}", headers=headers)
         assert res.status_code == 200
@@ -198,14 +205,14 @@ class TestGetPeer:
         assert res.json()["config_file"]
 
     def test_get_nonexistent(self, client):
-        headers = {"X-API-KEY": API_SECRET_KEY}
+        headers = {"X-API-KEY": settings.wagapi_api_key}
         res = client.get("/peers/99999", headers=headers)
         assert res.status_code == 404
 
 
 class TestUpdatePeer:
     def test_update_device_name(self, client):
-        headers = {"X-API-KEY": API_SECRET_KEY}
+        headers = {"X-API-KEY": settings.wagapi_api_key}
         peer = client.post("/peers", json={}, headers=headers).json()
         res = client.put(
             f"/peers/{peer['id']}",
@@ -216,7 +223,7 @@ class TestUpdatePeer:
         assert res.json()["device_name"] == "Updated-Device"
 
     def test_update_allowed_ips(self, client):
-        headers = {"X-API-KEY": API_SECRET_KEY}
+        headers = {"X-API-KEY": settings.wagapi_api_key}
         peer = client.post("/peers", json={}, headers=headers).json()
         res = client.put(
             f"/peers/{peer['id']}",
@@ -227,7 +234,7 @@ class TestUpdatePeer:
         assert res.json()["allowed_ips"] == "10.9.0.100/32"
 
     def test_update_nonexistent_peer(self, client):
-        headers = {"X-API-KEY": API_SECRET_KEY}
+        headers = {"X-API-KEY": settings.wagapi_api_key}
         res = client.put(
             "/peers/99999",
             json={"device_name": "Nope"},
@@ -236,7 +243,7 @@ class TestUpdatePeer:
         assert res.status_code == 404
 
     def test_update_peer_duplicate_ip(self, client):
-        headers = {"X-API-KEY": API_SECRET_KEY}
+        headers = {"X-API-KEY": settings.wagapi_api_key}
         p1 = client.post("/peers", json={}, headers=headers).json()
         p2 = client.post("/peers", json={}, headers=headers).json()
         res = client.put(
@@ -250,7 +257,7 @@ class TestUpdatePeer:
 
 class TestDeletePeer:
     def test_delete_peer(self, client):
-        headers = {"X-API-KEY": API_SECRET_KEY}
+        headers = {"X-API-KEY": settings.wagapi_api_key}
         peer = client.post("/peers", json={}, headers=headers).json()
         res = client.delete(f"/peers/{peer['id']}", headers=headers)
         assert res.status_code == 204
@@ -258,6 +265,6 @@ class TestDeletePeer:
         assert get_res.status_code == 404
 
     def test_delete_nonexistent(self, client):
-        headers = {"X-API-KEY": API_SECRET_KEY}
+        headers = {"X-API-KEY": settings.wagapi_api_key}
         res = client.delete("/peers/99999", headers=headers)
         assert res.status_code == 404

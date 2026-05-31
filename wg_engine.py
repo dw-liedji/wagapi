@@ -1,7 +1,8 @@
 import base64
-import os
-from pyroute2 import WireGuard
+from pyroute2 import WireGuard, IPRoute
 from cryptography.hazmat.primitives.asymmetric import x25519
+
+from settings import settings
 
 
 class WireGuardEngine:
@@ -25,7 +26,28 @@ class WireGuardEngine:
                             return base64.b64encode(value).decode()
         except Exception:
             pass
-        return os.environ.get("WG0_PUBLIC_KEY", "wg0_public_key_placeholder")
+        return settings.wg0_public_key
+
+    @staticmethod
+    def ensure_wg0_interface() -> None:
+        try:
+            with IPRoute() as ipr:
+                if "wg0" not in (x.get_attr("IFLA_IFNAME") for x in ipr.link_lookup(ifname="wg0")):
+                    ipr.link("add", ifname="wg0", kind="wireguard")
+                idx = ipr.link_lookup(ifname="wg0")[0]
+                ipr.link("set", index=idx, state="up")
+            with WireGuard() as wg:
+                kwargs = {"listen_port": settings.wg0_listen_port}
+                if settings.wg0_private_key:
+                    kwargs["private_key"] = base64.b64decode(settings.wg0_private_key)
+                wg.set("wg0", **kwargs)
+        except Exception:
+            pass
+
+    @staticmethod
+    def sync_all_peers_to_kernel(interface_name: str, peers: list[tuple[str, str]]) -> None:
+        for public_key, allowed_ips in peers:
+            WireGuardEngine.sync_peer_to_kernel(interface_name, public_key, allowed_ips)
 
     @staticmethod
     def sync_peer_to_kernel(interface_name: str, public_key: str, allowed_ips: str) -> None:
