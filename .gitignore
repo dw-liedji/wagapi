@@ -1,0 +1,66 @@
+node_modules/
+.venv/
+.ruff_cache/
+media/
+data/
+
+# OS
+.DS_Store
+._*
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+.installed.cfg
+*.manifest
+*.spec
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Tests / coverage
+htmlcov/
+.tox/
+.coverage
+.cache
+nosetests.xml
+coverage.xml
+
+# Translations
+*.mo
+*.pot
+
+# Docs
+docs/_build/
+
+# PyBuilder
+target/
+
+# Django
+*.log
+*.pyc
+local_settings.py
+.env
+.env.dev
+.env.prod
+!db.sqlite3
+
+# Database dumps
+*.dump
+
+# Jupyter notebooks
+*.ipynb
