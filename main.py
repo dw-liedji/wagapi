@@ -107,11 +107,12 @@ def add_peer(payload: schemas.PeerCreate, db: Session = Depends(get_db)):
 
 
 def _build_peer_config(peer: models.Peer) -> str:
-    private_key = peer.private_key
+    private_key = (peer.private_key or "").rstrip("=")
+    wg0_pubkey = WireGuardEngine.get_wg0_public_key().rstrip("=")
     return (
         f"[Interface]\nPrivateKey = {private_key}\nAddress = {peer.allowed_ips}\n"
         f"DNS = {WG0_DNS}\n\n"
-        f"[Peer]\nPublicKey = {WireGuardEngine.get_wg0_public_key()}\n"
+        f"[Peer]\nPublicKey = {wg0_pubkey}\n"
         f"Endpoint = {WG0_ENDPOINT}\nAllowedIPs = {SUBNET_POOL}\n"
     )
 
