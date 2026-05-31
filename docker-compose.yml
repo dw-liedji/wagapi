@@ -11,8 +11,8 @@ services:
       - WAGAPI_API_KEY=${WAGAPI_API_KEY:-ProductionSecretDynamicTunnelAPIKeyCredentialToken}
       - WAGAPI_DATA_DIR=/data
       - PORT=${PORT:-8000}
-    devices:
-      - /dev/net/tun:/dev/net/tun
+    # devices:
+    #   - /dev/net/tun:/dev/net/tun
 
 volumes:
   wagapi_data:
