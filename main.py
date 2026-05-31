@@ -1,4 +1,3 @@
-import asyncio
 import ipaddress
 import os
 from contextlib import asynccontextmanager
@@ -16,6 +15,11 @@ API_SECRET_KEY = os.environ.get(
 )
 api_key_header = APIKeyHeader(name="X-API-KEY", auto_error=False)
 
+WG0_PUBLIC_KEY = os.environ.get("WG0_PUBLIC_KEY", "wg0_public_key_placeholder")
+WG0_ENDPOINT = os.environ.get("WG0_ENDPOINT", "vpn.example.com:51820")
+WG0_DNS = os.environ.get("WG0_DNS", "1.1.1.1")
+SUBNET_POOL = os.environ.get("SUBNET_POOL", "10.9.0.0/16")
+
 
 def require_api_key(api_key: str = Security(api_key_header)):
     if api_key != API_SECRET_KEY:
@@ -24,15 +28,13 @@ def require_api_key(api_key: str = Security(api_key_header)):
         )
 
 
-def allocate_next_ip(interface: models.Interface) -> str:
-    network = ipaddress.ip_network(interface.subnet_pool)
-    used_ips = {p.allowed_ips.split("/")[0] for p in interface.peers}
+def allocate_next_ip(db: Session) -> str:
+    network = ipaddress.ip_network(SUBNET_POOL)
+    used_ips = {p.allowed_ips.split("/")[0] for p in db.query(models.Peer).all()}
 
     for ip in network.hosts():
         ip_str = str(ip)
-        if ip_str.endswith(".1") and ip_str.startswith(
-            str(network.network_address).rsplit(".", 2)[0]
-        ):
+        if ip_str.endswith(".1"):
             continue
         if ip_str not in used_ips:
             return f"{ip_str}/32"
@@ -42,17 +44,6 @@ def allocate_next_ip(interface: models.Interface) -> str:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     models.Base.metadata.create_all(bind=engine)
-    print("🔄 Boot: Restoring memory-based dynamic interfaces...")
-    db = SessionLocal()
-    try:
-        dynamic_interfaces = db.query(models.Interface).all()
-        for interface in dynamic_interfaces:
-            await asyncio.to_thread(
-                WireGuardEngine.render_entire_interface_from_db, interface
-            )
-            print(f"📡 Interface [{interface.name}] rendered inside RAM successfully.")
-    finally:
-        db.close()
     yield
 
 
@@ -60,189 +51,17 @@ app = FastAPI(
     title="WireGuard Hybrid SSOT Controller", version="4.0.0", lifespan=lifespan
 )
 
-# --- ENDPOINTS ---
-
 
 @app.post(
-    "/interfaces",
-    response_model=schemas.InterfaceResponse,
-    status_code=status.HTTP_201_CREATED,
-    tags=["Interfaces"],
-    dependencies=[Depends(require_api_key)],
-)
-def provision_dynamic_interface(
-    payload: schemas.InterfaceCreate, db: Session = Depends(get_db)
-):
-    if payload.name == "wg0":
-        raise HTTPException(
-            status_code=400,
-            detail="Interface name 'wg0' is reserved for system static infrastructure.",
-        )
-    if payload.listen_port == 51820:
-        raise HTTPException(
-            status_code=400,
-            detail="Port 51820 is reserved by the static host listener interface.",
-        )
-
-    if (
-        db.query(models.Interface)
-        .filter(
-            (models.Interface.name == payload.name)
-            | (models.Interface.listen_port == payload.listen_port)
-        )
-        .first()
-    ):
-        raise HTTPException(
-            status_code=400, detail="Interface name or network port collision detected."
-        )
-
-    priv, pub = WireGuardEngine.generate_keypair()
-    new_interface = models.Interface(
-        name=payload.name,
-        subnet_pool=payload.subnet_pool,
-        listen_port=payload.listen_port,
-        endpoint=payload.endpoint,
-        dns=payload.dns,
-        private_key=priv,
-        public_key=pub,
-    )
-    db.add(new_interface)
-    db.commit()
-    db.refresh(new_interface)
-
-    try:
-        WireGuardEngine.render_entire_interface_from_db(new_interface)
-    except Exception as e:
-        db.delete(new_interface)
-        db.commit()
-        raise HTTPException(
-            status_code=500, detail=f"Kernel netlink instantiation failure: {str(e)}"
-        )
-
-    return new_interface
-
-
-@app.get(
-    "/interfaces",
-    response_model=list[schemas.InterfaceResponse],
-    tags=["Interfaces"],
-    dependencies=[Depends(require_api_key)],
-)
-def list_interfaces(db: Session = Depends(get_db)):
-    return db.query(models.Interface).all()
-
-
-@app.get(
-    "/interfaces/{interface_id}",
-    response_model=schemas.InterfaceResponse,
-    tags=["Interfaces"],
-    dependencies=[Depends(require_api_key)],
-)
-def get_interface(interface_id: int, db: Session = Depends(get_db)):
-    interface = (
-        db.query(models.Interface)
-        .filter(models.Interface.id == interface_id)
-        .first()
-    )
-    if not interface:
-        raise HTTPException(status_code=404, detail="Interface not found.")
-    return interface
-
-
-@app.put(
-    "/interfaces/{interface_id}",
-    response_model=schemas.InterfaceResponse,
-    tags=["Interfaces"],
-    dependencies=[Depends(require_api_key)],
-)
-def update_interface(
-    interface_id: int,
-    payload: schemas.InterfaceUpdate,
-    db: Session = Depends(get_db),
-):
-    interface = (
-        db.query(models.Interface)
-        .filter(models.Interface.id == interface_id)
-        .first()
-    )
-    if not interface:
-        raise HTTPException(status_code=404, detail="Interface not found.")
-
-    update_data = payload.model_dump(exclude_unset=True)
-    for field, value in update_data.items():
-        if field == "listen_port":
-            if value == 51820:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Port 51820 is reserved by the static host listener interface.",
-                )
-            conflict = (
-                db.query(models.Interface)
-                .filter(
-                    models.Interface.listen_port == value,
-                    models.Interface.id != interface_id,
-                )
-                .first()
-            )
-            if conflict:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Interface name or network port collision detected.",
-                )
-        setattr(interface, field, value)
-    db.commit()
-    db.refresh(interface)
-
-    re_render = "listen_port" in update_data
-    if re_render:
-        try:
-            WireGuardEngine.render_entire_interface_from_db(interface)
-        except Exception as e:
-            raise HTTPException(
-                status_code=500,
-                detail=f"Kernel netlink instantiation failure: {str(e)}",
-            )
-
-    return interface
-
-
-@app.delete(
-    "/interfaces/{interface_id}",
-    status_code=status.HTTP_204_NO_CONTENT,
-    tags=["Interfaces"],
-    dependencies=[Depends(require_api_key)],
-)
-def drop_dynamic_interface(interface_id: int, db: Session = Depends(get_db)):
-    interface = (
-        db.query(models.Interface).filter(models.Interface.id == interface_id).first()
-    )
-    if not interface:
-        raise HTTPException(status_code=404, detail="Interface not found.")
-
-    WireGuardEngine.destroy_interface_from_kernel(interface.name)
-    db.delete(interface)
-    db.commit()
-    return
-
-
-@app.post(
-    "/interfaces/{interface_id}/peers",
+    "/peers",
     response_model=schemas.PeerResponse,
     status_code=status.HTTP_201_CREATED,
     tags=["Peers"],
     dependencies=[Depends(require_api_key)],
 )
-def add_peer_to_dynamic_interface(
-    interface_id: int, payload: schemas.PeerCreate, db: Session = Depends(get_db)
-):
+def add_peer(payload: schemas.PeerCreate, db: Session = Depends(get_db)):
     try:
-        interface = (
-            db.query(models.Interface).filter(models.Interface.id == interface_id).first()
-        )
-        if not interface:
-            raise HTTPException(status_code=404, detail="Interface not found.")
-
-        assigned_cidr = allocate_next_ip(interface)
+        assigned_cidr = allocate_next_ip(db)
         private_key, public_key = None, payload.public_key
         if not public_key:
             private_key, public_key = WireGuardEngine.generate_keypair()
@@ -253,7 +72,6 @@ def add_peer_to_dynamic_interface(
             )
 
         db_peer = models.Peer(
-            interface_id=interface.id,
             device_name=payload.device_name,
             public_key=public_key,
             allowed_ips=assigned_cidr,
@@ -263,7 +81,7 @@ def add_peer_to_dynamic_interface(
         db.refresh(db_peer)
 
         try:
-            WireGuardEngine.sync_peer_to_kernel(interface.name, public_key, assigned_cidr)
+            WireGuardEngine.sync_peer_to_kernel("wg0", public_key, assigned_cidr)
         except Exception as e:
             db.delete(db_peer)
             db.commit()
@@ -278,12 +96,12 @@ def add_peer_to_dynamic_interface(
         )
 
     config_string = (
-        f"[Interface]\nPrivateKey = {private_key or 'CLIENT_PRIVATE_KEY'}\nAddress = {assigned_cidr}\nDNS = {interface.dns}\n\n"
-        f"[Peer]\nPublicKey = {interface.public_key}\nEndpoint = {interface.endpoint}\nAllowedIPs = 0.0.0.0/0\n"
+        f"[Interface]\nPrivateKey = {private_key or 'CLIENT_PRIVATE_KEY'}\nAddress = {assigned_cidr}\n"
+        f"DNS = {WG0_DNS}\n\n"
+        f"[Peer]\nPublicKey = {WG0_PUBLIC_KEY}\nEndpoint = {WG0_ENDPOINT}\nAllowedIPs = 0.0.0.0/0\n"
     )
     return schemas.PeerResponse(
         id=db_peer.id,
-        interface_id=db_peer.interface_id,
         device_name=db_peer.device_name,
         public_key=db_peer.public_key,
         private_key=private_key,
@@ -293,96 +111,62 @@ def add_peer_to_dynamic_interface(
     )
 
 
-def _build_peer_config(
-    interface: models.Interface, peer: models.Peer
-) -> str:
+def _build_peer_config(peer: models.Peer) -> str:
     return (
         f"[Interface]\nPrivateKey = CLIENT_PRIVATE_KEY\nAddress = {peer.allowed_ips}\n"
-        f"DNS = {interface.dns}\n\n"
-        f"[Peer]\nPublicKey = {interface.public_key}\n"
-        f"Endpoint = {interface.endpoint}\nAllowedIPs = 0.0.0.0/0\n"
+        f"DNS = {WG0_DNS}\n\n"
+        f"[Peer]\nPublicKey = {WG0_PUBLIC_KEY}\n"
+        f"Endpoint = {WG0_ENDPOINT}\nAllowedIPs = 0.0.0.0/0\n"
     )
 
 
-def _peer_to_response(
-    peer: models.Peer, config_file: str,
-) -> schemas.PeerResponse:
+def _peer_to_response(peer: models.Peer) -> schemas.PeerResponse:
     return schemas.PeerResponse(
         id=peer.id,
-        interface_id=peer.interface_id,
         device_name=peer.device_name,
         public_key=peer.public_key,
         private_key=None,
         allowed_ips=peer.allowed_ips,
         created_at=peer.created_at,
-        config_file=config_file,
+        config_file=_build_peer_config(peer),
     )
 
 
 @app.get(
-    "/interfaces/{interface_id}/peers",
+    "/peers",
     response_model=list[schemas.PeerResponse],
     tags=["Peers"],
     dependencies=[Depends(require_api_key)],
 )
-def list_peers(interface_id: int, db: Session = Depends(get_db)):
-    interface = (
-        db.query(models.Interface)
-        .filter(models.Interface.id == interface_id)
-        .first()
-    )
-    if not interface:
-        raise HTTPException(status_code=404, detail="Interface not found.")
-    return [
-        _peer_to_response(p, _build_peer_config(interface, p))
-        for p in interface.peers
-    ]
+def list_peers(db: Session = Depends(get_db)):
+    return [_peer_to_response(p) for p in db.query(models.Peer).all()]
 
 
 @app.get(
-    "/interfaces/{interface_id}/peers/{peer_id}",
+    "/peers/{peer_id}",
     response_model=schemas.PeerResponse,
     tags=["Peers"],
     dependencies=[Depends(require_api_key)],
 )
-def get_peer(
-    interface_id: int, peer_id: int, db: Session = Depends(get_db)
-):
-    peer = (
-        db.query(models.Peer)
-        .filter(
-            models.Peer.id == peer_id,
-            models.Peer.interface_id == interface_id,
-        )
-        .first()
-    )
+def get_peer(peer_id: int, db: Session = Depends(get_db)):
+    peer = db.query(models.Peer).filter(models.Peer.id == peer_id).first()
     if not peer:
         raise HTTPException(status_code=404, detail="Peer not found.")
-    return _peer_to_response(
-        peer, _build_peer_config(peer.interface_rel, peer)
-    )
+    return _peer_to_response(peer)
 
 
 @app.put(
-    "/interfaces/{interface_id}/peers/{peer_id}",
+    "/peers/{peer_id}",
     response_model=schemas.PeerResponse,
     tags=["Peers"],
     dependencies=[Depends(require_api_key)],
 )
 def update_peer(
-    interface_id: int,
     peer_id: int,
     payload: schemas.PeerUpdate,
     db: Session = Depends(get_db),
 ):
-    peer = (
-        db.query(models.Peer)
-        .filter(
-            models.Peer.id == peer_id,
-            models.Peer.interface_id == interface_id,
-        )
-        .first()
-    )
+    peer = db.query(models.Peer).filter(models.Peer.id == peer_id).first()
     if not peer:
         raise HTTPException(status_code=404, detail="Peer not found.")
 
@@ -409,10 +193,9 @@ def update_peer(
     db.refresh(peer)
 
     if "allowed_ips" in update_data:
-        interface = peer.interface_rel
         try:
             WireGuardEngine.sync_peer_to_kernel(
-                interface.name, peer.public_key, peer.allowed_ips
+                "wg0", peer.public_key, peer.allowed_ips
             )
         except Exception as e:
             raise HTTPException(
@@ -420,34 +203,22 @@ def update_peer(
                 detail=f"Kernel failed loading runtime rule: {str(e)}",
             )
 
-    return _peer_to_response(
-        peer, _build_peer_config(peer.interface_rel, peer)
-    )
+    return _peer_to_response(peer)
 
 
 @app.delete(
-    "/interfaces/{interface_id}/peers/{peer_id}",
+    "/peers/{peer_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     tags=["Peers"],
     dependencies=[Depends(require_api_key)],
 )
-def delete_peer(
-    interface_id: int, peer_id: int, db: Session = Depends(get_db)
-):
-    peer = (
-        db.query(models.Peer)
-        .filter(
-            models.Peer.id == peer_id,
-            models.Peer.interface_id == interface_id,
-        )
-        .first()
-    )
+def delete_peer(peer_id: int, db: Session = Depends(get_db)):
+    peer = db.query(models.Peer).filter(models.Peer.id == peer_id).first()
     if not peer:
         raise HTTPException(status_code=404, detail="Peer not found.")
 
-    interface = peer.interface_rel
     try:
-        WireGuardEngine.drop_peer_from_kernel(interface.name, peer.public_key)
+        WireGuardEngine.drop_peer_from_kernel("wg0", peer.public_key)
     except Exception as e:
         raise HTTPException(
             status_code=500,

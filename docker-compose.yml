@@ -9,7 +9,7 @@ services:
       - wagapi_data:/data
     environment:
       - WAGAPI_API_KEY=${WAGAPI_API_KEY:-ProductionSecretDynamicTunnelAPIKeyCredentialToken}
-      - WAGAPI_DATA_DIR=/data
+      - WAGAPI_DATA_DIR=/data/test
       - PORT=${PORT:-8000}
 
 volumes:
