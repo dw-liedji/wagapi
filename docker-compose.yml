@@ -6,8 +6,8 @@ services:
       - SYS_MODULE
     volumes:
       - wagapi_data:/data
-    ports:
-      - "${PORT:-8000}:${PORT:-8000}"
+    # ports:
+    #   - "${PORT:-8000}:${PORT:-8000}"
     environment:
       - WAGAPI_API_KEY=${WAGAPI_API_KEY:-ProductionSecretDynamicTunnelAPIKeyCredentialToken}
       - WAGAPI_DATA_DIR=/data
