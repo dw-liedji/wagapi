@@ -1,6 +1,7 @@
 node_modules/
 .venv/
 .ruff_cache/
+.pytest_cache/
 media/
 data/
 
