@@ -1,18 +1,59 @@
-FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim AS builder
-WORKDIR /app
-COPY uv.lock pyproject.toml ./
-RUN uv sync --frozen --no-dev
+# ---------------------------------------------------------
+# STAGE 1: Builder (Dependencies & venv)
+# ---------------------------------------------------------
+FROM python:3.11-slim-bookworm AS builder
 
-FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    wireguard-tools iproute2 \
+    build-essential \
+    libffi-dev \
+    curl \
     && rm -rf /var/lib/apt/lists/*
-COPY --from=builder /app /app
-COPY --from=builder /root/.local /root/.local
-COPY . /app
+
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
 WORKDIR /app
-ENV PATH=/root/.local/bin:$PATH \
+
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-install-project --no-dev
+
+# ---------------------------------------------------------
+# STAGE 2: Runtime (Minimal, Non-Root)
+# ---------------------------------------------------------
+FROM python:3.11-slim-bookworm AS runtime
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    UV_COMPILE_BYTECODE=1
+    PATH="/app/.venv/bin:$PATH"
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    wireguard-tools \
+    iproute2 \
+    && rm -rf /var/lib/apt/lists/*
+
+# ---------------------------------------------------------
+# Create non-root user (fixed UID/GID for volumes)
+# ---------------------------------------------------------
+RUN addgroup --system --gid 1000 app \
+    && adduser --system --uid 1000 --ingroup app app
+
+WORKDIR /app
+
+RUN mkdir -p /data \
+    && chown -R app:app /data
+
+# ---------------------------------------------------------
+# Copy virtualenv & source code
+# ---------------------------------------------------------
+COPY --from=builder /app/.venv /app/.venv
+COPY --chown=app:app . /app
+
+# ---------------------------------------------------------
+# Setup entrypoint
+# ---------------------------------------------------------
+RUN chmod +x /app/entrypoint.sh
+
+USER app
+
 EXPOSE 8000
-CMD ["sh", "-c", "uv run uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+
+CMD ["/app/entrypoint.sh"]
