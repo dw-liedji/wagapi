@@ -74,6 +74,7 @@ def add_peer(payload: schemas.PeerCreate, db: Session = Depends(get_db)):
         db_peer = models.Peer(
             device_name=payload.device_name,
             public_key=public_key,
+            private_key=private_key,
             allowed_ips=assigned_cidr,
         )
         db.add(db_peer)
@@ -95,28 +96,24 @@ def add_peer(payload: schemas.PeerCreate, db: Session = Depends(get_db)):
             status_code=500, detail=f"Peer creation failed: {type(e).__name__}: {str(e)}"
         )
 
-    config_string = (
-        f"[Interface]\nPrivateKey = {private_key or 'CLIENT_PRIVATE_KEY'}\nAddress = {assigned_cidr}\n"
-        f"DNS = {WG0_DNS}\n\n"
-        f"[Peer]\nPublicKey = {WG0_PUBLIC_KEY}\nEndpoint = {WG0_ENDPOINT}\nAllowedIPs = 0.0.0.0/0\n"
-    )
     return schemas.PeerResponse(
         id=db_peer.id,
         device_name=db_peer.device_name,
         public_key=db_peer.public_key,
-        private_key=private_key,
+        private_key=db_peer.private_key,
         allowed_ips=db_peer.allowed_ips,
         created_at=db_peer.created_at,
-        config_file=config_string,
+        config_file=_build_peer_config(db_peer),
     )
 
 
 def _build_peer_config(peer: models.Peer) -> str:
+    private_key = peer.private_key
     return (
-        f"[Interface]\nPrivateKey = CLIENT_PRIVATE_KEY\nAddress = {peer.allowed_ips}\n"
+        f"[Interface]\nPrivateKey = {private_key}\nAddress = {peer.allowed_ips}\n"
         f"DNS = {WG0_DNS}\n\n"
         f"[Peer]\nPublicKey = {WG0_PUBLIC_KEY}\n"
-        f"Endpoint = {WG0_ENDPOINT}\nAllowedIPs = 0.0.0.0/0\n"
+        f"Endpoint = {WG0_ENDPOINT}\nAllowedIPs = {SUBNET_POOL}\n"
     )
 
 
@@ -125,7 +122,7 @@ def _peer_to_response(peer: models.Peer) -> schemas.PeerResponse:
         id=peer.id,
         device_name=peer.device_name,
         public_key=peer.public_key,
-        private_key=None,
+        private_key=peer.private_key,
         allowed_ips=peer.allowed_ips,
         created_at=peer.created_at,
         config_file=_build_peer_config(peer),

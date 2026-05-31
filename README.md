@@ -45,8 +45,8 @@ Peers are assigned consecutive `/32` IPs from the `SUBNET_POOL` starting at `.2`
 
 ## Try from browser
 
-- Swagger UI: `http://localhost:8001/docs`
-- ReDoc: `http://localhost:8001/redoc`
+- Swagger UI: `http://localhost:8000/docs`
+- ReDoc: `http://localhost:8000/redoc`
 
 ### curl examples
 
@@ -54,11 +54,11 @@ All endpoints require the `X-API-KEY` header.
 
 ```sh
 # ── LIST ────────────────────────────────────────────────────
-curl -s http://localhost:8001/peers \
+curl -s http://localhost:8000/peers \
   -H "X-API-KEY: ProductionSecretDynamicTunnelAPIKeyCredentialToken" | jq
 
 # ── CREATE (auto key) ───────────────────────────────────────
-curl -s -X POST http://localhost:8001/peers \
+curl -s -X POST http://localhost:8000/peers \
   -H "Content-Type: application/json" \
   -H "X-API-KEY: ProductionSecretDynamicTunnelAPIKeyCredentialToken" \
   -d '{"device_name":"Developer-Laptop"}' | jq
@@ -72,23 +72,23 @@ curl -s -X POST http://localhost:8001/peers \
 # }
 
 # ── CREATE (explicit key) ───────────────────────────────────
-curl -s -X POST http://localhost:8001/peers \
+curl -s -X POST http://localhost:8000/peers \
   -H "Content-Type: application/json" \
   -H "X-API-KEY: ProductionSecretDynamicTunnelAPIKeyCredentialToken" \
   -d '{"public_key":"xTIBdExlFbFKB5NUhVq3PPcEb4P+Jw4O6itFnH+Dhjc="}' | jq
 
 # ── GET ─────────────────────────────────────────────────────
-curl -s http://localhost:8001/peers/1 \
+curl -s http://localhost:8000/peers/1 \
   -H "X-API-KEY: ProductionSecretDynamicTunnelAPIKeyCredentialToken" | jq
 
 # ── UPDATE ──────────────────────────────────────────────────
-curl -s -X PUT http://localhost:8001/peers/1 \
+curl -s -X PUT http://localhost:8000/peers/1 \
   -H "Content-Type: application/json" \
   -H "X-API-KEY: ProductionSecretDynamicTunnelAPIKeyCredentialToken" \
   -d '{"device_name":"New-Device","allowed_ips":"10.9.0.10/32"}' | jq
 
 # ── DELETE ──────────────────────────────────────────────────
-curl -s -X DELETE http://localhost:8001/peers/1 \
+curl -s -X DELETE http://localhost:8000/peers/1 \
   -H "X-API-KEY: ProductionSecretDynamicTunnelAPIKeyCredentialToken" -w "\n%{http_code}\n"
 
 # Response: 204 No Content
@@ -104,7 +104,7 @@ Requires `NET_ADMIN`, `SYS_MODULE` capabilities and `/dev/net/tun` device access
 |---|---|---|
 | `WAGAPI_API_KEY` | `ProductionSecretDynamicTunnelAPIKeyCredentialToken` | API auth key (`X-API-KEY` header) |
 | `WAGAPI_DATA_DIR` | `data` | Directory for SQLite database |
-| `PORT` | `8001` | Uvicorn listen port |
+| `PORT` | `8000` | Uvicorn listen port |
 
 ## Notes
 

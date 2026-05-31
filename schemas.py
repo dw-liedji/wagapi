@@ -18,6 +18,9 @@ class PeerUpdate(BaseModel):
     allowed_ips: str | None = Field(
         None, json_schema_extra={"example": "10.9.0.5/32"}
     )
+    private_key: str | None = Field(
+        None, json_schema_extra={"example": "sL...cI="}
+    )
 
 
 class PeerResponse(BaseModel):

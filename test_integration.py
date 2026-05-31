@@ -105,7 +105,8 @@ class TestPeerCreate:
         assert "PrivateKey" in cfg.split("[Interface]")[1].split("[Peer]")[0]
         assert "PublicKey" in cfg.split("[Peer]")[1]
         assert "Endpoint" in cfg
-        assert "0.0.0.0/0" in cfg
+        assert "AllowedIPs = " in cfg
+        assert "0.0.0.0/0" not in cfg
 
 
 class TestApiResponseShape:
