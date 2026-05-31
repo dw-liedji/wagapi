@@ -10,8 +10,8 @@ class WireGuardEngine:
         priv_key = x25519.X25519PrivateKey.generate()
         pub_key = priv_key.public_key()
         return (
-            base64.b64encode(priv_key.private_bytes_raw()).decode("utf-8"),
-            base64.b64encode(pub_key.public_bytes_raw()).decode("utf-8"),
+            base64.b64encode(priv_key.private_bytes_raw()).decode("utf-8").rstrip("="),
+            base64.b64encode(pub_key.public_bytes_raw()).decode("utf-8").rstrip("="),
         )
 
     @staticmethod
@@ -22,7 +22,7 @@ class WireGuardEngine:
                 if info:
                     for name, value in info[0].get("attrs", []):
                         if name == "WGDEVICE_A_PUBLIC_KEY":
-                            return base64.b64encode(value).decode()
+                            return base64.b64encode(value).decode().rstrip("=")
         except Exception:
             pass
         return os.environ.get("WG0_PUBLIC_KEY", "wg0_public_key_placeholder")
